@@ -1,0 +1,518 @@
+---
+title: "Individual Assignment 4"
+author: "MSCI 718"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(psych)
+library(ggiraph)
+library(ggiraphExtra)
+library(car)
+library(tidyverse)
+library(knitr)    # For knitting document and include_graphics function
+library(gridExtra) # For including grids of plots
+library(forecast)
+library(GGally)
+```
+
+```{r}
+house<-read.csv("housing_data.csv")
+str(house)
+
+```
+
+# There are 13580 observations and 21 variables in this dataset which reflects the details of housing/ real estate market in Melbourne.
+
+```{r}
+summary(house)
+```
+```{r}
+a<- is.na(house) # To check the null values
+sum(a)
+b<-drop(a)
+```
+
+# There are 11887 observations with null values. The null values are in variables Car, BuildingArea, YearBuilt and CouncilArea. It would not be feasible to replace these null values with mean or median values as it may add complication in the dataset and may affect the model negatively. So, here all the null values are removed.
+
+```{r}
+complete.cases(house)
+b<-house[complete.cases(house),]
+str(b)
+house1<-na.omit(house)
+
+```
+
+# All the null values are removed from the dataset. The new dataset has 6830 observations and 21 variables. 
+
+```{r}
+summary(house1)
+```
+
+# Further exploring the data as follows: 
+
+```{r}
+unique(house1[c("Suburb")]) #300 suburbs are there
+unique(house1[c("Rooms")]) # Houses up to 8 rooms are there
+unique(house1[c("Type")]) 
+#Three types of houses are as follows:
+# h : house,cottage,villa,semi, terrace
+# u : unit, duplex
+# t : townhouse
+unique(house1[c("Method")]) 
+#5 types of method for selling the houses are as follows : S - property sold; SP - property sold prior ;PI - property passed in; VB - vendor bid ; SA - sold after auction;
+unique(house1[c("Bathroom")]) #There are total 1 to 8 Bathrooms.
+unique(house1[c("Bedroom2")]) #bedroom2 are from 0 to 8.
+unique(house1[c('Regionname')]) # There are 8 region names.
+unique(house1[c('CouncilArea')]) # There are 32 Council areas.
+```
+
+
+```{r}
+house2<- separate(house1, "Date", c("Day","Month","Year"), sep = "/")
+house2<- transform(house2, Month = as.integer(Month), 
+               Day = as.integer(Day),
+               Year = as.integer(Year))
+house2
+```
+
+```{r}
+house2$houseage <- house2$Year-house2$YearBuilt #Age of Construction at the time of sell
+house2
+```
+
+
+```{r}
+house3 <- na.omit(house2)
+house3
+
+summary(house3)
+```
+```{r}
+#Houseage can not be negative.
+#Landsize and Building Area can not be zero.
+#These inappropriate values may have negative effect on our model so considering them as outliers, these values are removed from the dataset.
+
+false.data<- dplyr::filter(house3,houseage < 0 | houseage> 800 | Landsize == 0 | BuildingArea == 0 ) 
+false.data 
+
+#Thus, 1023 observations in the dataset are having date issue, Landsize and buildingArea equal to zero. These false values are removed from the dataset.
+```
+```{r}
+house3<- dplyr::filter(house3,houseage >= 0 & houseage <800 & Landsize > 0  & BuildingArea > 0 ) 
+house3
+```
+# Thus, the final dataset contains 5791 observations and 24 columns. This dataset can now be consider as a tidy dataset and further Exploratory data analysis can be carried out.
+
+```{r}
+summary(house3)
+```
+
+
+```{r}
+ggplot(house3, aes(y=Price, x=Rooms)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Number of rooms in the house",
+         y="Region name");
+```
+
+# It can be seen that price of a 3 room house is the highest. Moreover, the price of a 8 rooms house is less compared to most of the houses with less rooms. It can be interpreted that the prices of the houses are not only dependant on number of rooms but also dependent on the features such as Area,Region or Distance from Central Business District (CBD). Let us see the percentage of houses located in different region of Melbourne city.
+
+```{r}
+ggplot(house3, aes(x = (..count..)/sum(..count..)*100)) +  
+  geom_bar(aes(y = Regionname))  +
+        labs (x="Percentage", y = "Regionname")
+
+```
+
+# It can be observed that maximum number of houses are located in Southern Metropolitan region of Melbourne. Least number of houses are located in Western Victoria region of Melbourne. 
+
+
+# In the following steps, there is a comparison between location (Region) vs features of houses which can be visualise by following graphs:
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Rooms, colour= Price)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Number of rooms in the house",
+         y="Region name");
+```
+
+# It can be visualise that most of the houses in the dataset has rooms between 2 to 4. Also, regions like Western Metropolitan, Southern Metropolitan and Northern Metropolitan have more houses with 2 to 4 rooms. 
+
+# Secondly, regions like Eastern Metropolitan, Northern Metropolitan and Western Metropolitan have houses with nearly 8 rooms and still the price of houses are less compared to that in Southern Metropolitan.
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Bathroom, colour= Price)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Number of bathrooms in the house",
+         y="Region name");
+```
+
+# It can be visualise that most of the houses in the dataset has bathrooms between 1 to 3. Also, regions like Western Metropolitan, Southern Metropolitan, Northern Metropolitan and Eastern Metropolitan have more houses with bathrooms from 1 to 3.
+
+# Secondly, region like Northern  Metropolitan has maximum number of bathrooms but still the price of house is less compared to prices in Southern Metropolitan region.
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Car, colour= Price)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Number of car parkings in the house",
+         y="Region name");
+```
+# It can be visualise that most of the houses in the dataset has Car parkings between 1 to 4. Also, regions like Western Metropolitan, Southern Metropolitan, Northern Metropolitan and Eastern Metropolitan have more houses with car parkings from 1 to 4.
+
+# Secondly, regions like Northern  Metropolitan and Eastern Metropolitan have maximum number of car parkings but still the price of house is less compared to prices in Southern Metropolitan region.
+
+# Let us visualise the above graphs in a different way to verify the interpretations.
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Price, colour = Rooms)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Price of the house",
+         y="Region name");
+```
+
+# It can be visualise that as the number of rooms increases, the price of houses increases. This is most likely seen in region Southern Metropolitan. Considering the house size with number of rooms between 2 to 4, Southern Metropolitan region has houses with highest prices.
+
+# On the other hand, it can be visualise that the price of house with 6 rooms in Northern Metropolitan region is less than price of house with 3-6 rooms in Southern Metropolitan.
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Price, colour = Bathroom)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Price of the house",
+         y="Region name");
+```
+
+# It can be visualise that as the number of bathrooms increases, the price of houses increases. This is most likely seen in region Southern Metropolitan. Considering the house size with number of bathrooms between 2 to 4, Southern Metropolitan region has houses with highest prices.
+
+```{r}
+ggplot(house3, aes(y=Regionname, x=Price, colour = Car)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Price of the house",
+         y="Region name");
+```
+# It can be visualise that as the number of car parkings increases, the price of houses increases. This is most likely seen in region Southern Metropolitan. Considering the house size with number of car parkings between 1 to 4, Southern Metropolitan region has houses with highest prices.
+
+# On the other hand, it can be visualise that the price of house with nearly 8 car parkings in Northern Metropolitan region is less than price of most of the houses with nearly 3-7 car parkings in Southern Metropolitan.
+
+# Thus, it can be concluded from the above interpretations that areas of Northern Metropolitan like can give the biggest house of a particular price.
+
+
+# Let's visualise more graphs to determine the important features to predict the price of houses.
+
+```{r}
+ggplot(house3, aes(y=Price, x=Landsize, colour=Regionname)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Landsize of the house",
+         y="Price of the house (In dollars)");
+```
+
+# It can be observed that even with a slight increase in the landsize of house, the price of houses shows extreme increment in the southern metropolitan region of Melbourne.
+
+```{r}
+ggplot(house3, aes(y=Price, x=BuildingArea, colour= Regionname)) +
+  geom_point() +
+    geom_jitter() +
+  labs(x="Building Area",
+         y="Price of the house in dollars");
+```
+
+# It can be observed that the price of the house are affected by the Landsize or BuildingArea of the house. But, it is not much clear through this graph. let's analyse between other features too.
+
+```{r}
+
+ggplot(data=house3) + geom_point(mapping= aes(x=Distance, y=Price, colour= Regionname)) +
+  labs(x="Distance from Central Business District (CBD) in Kms", y="Price of houses")
+
+```
+
+# It can be observed that as the distance from the Central Business District (CBD) of Melbourne is increased, the price of house shows a decreasing trend. This can be interpreted as: if the house is near the CBD then the price of house is more. If the house is far away from CBD then the price of house is less. Thus, Distance from CBD can be an important feature to determine the price of house.
+
+```{r}
+
+ggplot(data=house3) + geom_point(mapping= aes(x= Rooms, y=Price, colour = Regionname)) +
+  labs(x="Number of Bathrooms in house", y="Price of house")
+
+```
+
+# From the above graph it can be interpreted that price of the house is not much depend on the number of bathrooms. As it can be visualise that even if the number of bathroom 1, the price of house is more compared to the house with 8 bathrooms.
+
+```{r}
+
+ggplot(data=house3) + geom_jitter(mapping= aes(x=YearBuilt, y=Price, colour= Regionname)) +
+  labs(x="Year in which the house was built", y="Price of house")
+
+```
+# There is no much impact of yearbuilt on the price of houses. It is more or less falling in the same range of prices for years between 1800 and 2018.
+
+# From overall EDA done above, it can be concluded that the price of houses may vary due to features like Region, Distance from CBD, number of rooms, Bathrooms, Car and Landsize.
+
+# For further analysis and to design the accurate model for predicting house price, let's take into consideration the house type "t" i.e. townhouse. 
+
+```{r}
+house_final<-dplyr::filter(house3,Type=='t') 
+house_final
+```
+
+
+# The final dataset ready to design a linear regression model has 553 observations and 24 rows.
+
+
+## Assumptions of multiple linear regression
+
+1. all predictor variables i.e. "Bedroom2", "Bathroom", "Car", "Distance" and "Regionname" are quantitative or categorical, and outcome variable "Price" is quantitative, continuous, and unbounded. Thus, the first assumption is fulfilled.
+
+2. non-zero variance
+
+```{r}
+Bedroom<-var(house_final$Bedroom2)
+Bedroom
+Bathroom<-var(house_final$Bathroom)
+Bathroom
+Car<-var(house_final$Car)
+Car
+Distance<-var(house_final$Distance)
+Distance
+Price<-var(house_final$Price)
+Price
+```
+# Thus, the variance is non-zero for all the variables. Thus, the second assumption is fulfilled.
+
+
+3. no perfect multicollinearity (predictor variables should not correlate highly)
+
+```{r}
+corr1<-cor.test(house_final$Bedroom2,house_final$Bathroom)
+corr1
+corr2<-cor.test(house_final$Bathroom,house_final$Car)
+corr2
+corr3<-cor.test(house_final$Car,house_final$Distance)
+corr3
+```
+# Thus, it can be said that there is no multicollinearity between the predictor variables. The third assumption is fulfilled.
+
+4. predictors are uncorrelated with external variables
+
+# Maybe - this could be a problem, but mostly for interpretation and validity of the predicted values. for now, let's assume there aren't any external variables.
+
+5. residuals are homoscedastic (constant variance), independent (test with Durbin-Watson), Normal
+
+# This can be analysed using Durbin-Watson method after the model is prepared.
+
+6. linearity (outcome variable means lie on straight line)
+
+#It is clear from the graph below using ggPredict function that there is a linear relationship between predictor variables and outcome variable. Thus, Sixth assumption is fulfilled.
+
+# Designing the multiple linear regression model.
+
+# Model 1: Predictor variable: Rooms, Outcome Variable: Price
+
+```{r}
+house.model1 <- lm(Price ~ Rooms, data=house_final)
+summary(house.model1)
+confint(house.model1)
+```
+
+# The formula of linear regression is: B0 + B1*X1; where B0 is the intercept, B1 is the coefficient of predictor variable X1.
+# The coefficient for predictor variable Rooms: 238104. Thus, B0 = 218464, B1 = 238104 for X1 = Rooms.
+# The p-value < 2.2e-16 which means this model is significant.
+
+```{r}
+ggPredict(house.model1, se=TRUE)
+```
+
+# It can be visualise that as the number of rooms increases, the price of house is also increasing.
+
+```{r}
+newValues<-data.frame(Rooms=c(2,4))
+predict.lm(house.model1,newdata = newValues)
+```
+# Checking for Outliers
+
+```{r}
+house_final$standardized.residuals <- rstandard(house.model1)
+possible.outliers <- subset(house_final, standardized.residuals < -1.96 | standardized.residuals > 1.96)
+possible.outliers
+```
+# We found 23 residuals are above or below 1.96 standard deviations. As this represents 4.1% of the observations, expected if the residuals are normal (5% of data is expected to be outside of 2 standard deviations), we do not consider any of these observations as outliers and continued with all 553 observations included in the first model.
+
+```{r}
+durbinWatsonTest(house.model1)
+```
+
+# The Durbin-Watson test for independent errors was not significant at the 5% level of significance (d=1.52, p=0). As d is close to 2 (which would indicate no autocorrelation detected), we do not reject the null hypothesis that the errors are independent, and continue with the assumption of independence met.
+
+
+
+
+# Model 2: Predictor variable: Rooms, Bathroom, outcome variable: Price
+
+```{r}
+house.model2 <- lm(Price ~ Rooms + Bathroom + Car, data=house_final)
+summary(house.model2)
+confint(house.model2)
+```
+
+# The formula of multiple linear regression is: B0 + B1*X1 + B2*X2 + B3*X3; where B0 is the intercept, B1 is the coefficient of predictor variable X1, B2 is the coefficient of predictor variable X2 and B3 is the coefficient of predictor variable X3.
+# The coefficient for predictor variable Rooms: 105322, Bathroom: 187888, Car: 97997. Thus, B0 = 107200, B1 = 105322 for X1 = Rooms, B2 = 187888 for X2 = Bathroom and B3 = 97997 for X3 = Car.
+# The p-value < 2.2e-16 which means this model is also significant.
+
+```{r}
+ggPredict(house.model2, se=TRUE,colorAsFactor = TRUE) 
+```
+
+# Checking for outliers
+
+```{r}
+house_final$standardized.residuals <- rstandard(house.model2)
+possible.outliers <- subset(house_final, standardized.residuals < -1.96 | standardized.residuals > 1.96)
+possible.outliers
+```
+
+# We found 19 residuals are above or below 1.96 standard deviations. As this represents 3.4% of the observations, expected if the residuals are normal (5% of data is expected to be outside of 2 standard deviations), we do not consider any of these observations as outliers and continued with all 553 observations included in the second model.
+
+```{r}
+newValues<-data.frame(Rooms=c(2,2),Bathroom=c(2,3),Car=c(0,2))
+predict.lm(house.model2,newdata = newValues)
+```
+
+# Thus, if you have a 2-Rooms, 2-Bathrooms house (Type= townshouse) in a particular location, then the best upgrade one can make is to increase the number of car parking and a bathroom before selling to get a better price out of it.
+
+```{r}
+durbinWatsonTest(house.model2)
+```
+# The Durbin-Watson test for independent errors was not significant at the 5% level of significance (d=1.58, p=0). As d is close to 2 (which would indicate no autocorrelation detected), we do not reject the null hypothesis that the errors are independent, and continue with the assumption of independence met.
+
+
+# Model 3: Predictor variable: Distance, outcome variable: Price
+
+```{r}
+house.model3 <- lm(Price ~ Distance , data=house_final)
+summary(house.model3)
+confint(house.model3)
+```
+
+# The formula of linear regression is: B0 + B1*X1; where B0 is the intercept, B1 is the coefficient of predictor variable X1.
+# The coefficient for predictor variable Distance: -10298. Thus, B0 = 1007233, B1 = -10298 for X1 = Distance.
+# The price of houses are droppping with the increase in the distance from CBD which can be verify by the negative B1 coefficient.
+# The p-value= 0.00439 which means this model is also significant at 99% confidence intervals.
+
+```{r}
+ggPredict(house.model3, se=TRUE) 
+```
+
+```{r}
+house_final$standardized.residuals <- rstandard(house.model3)
+possible.outliers <- subset(house_final, standardized.residuals < -1.96 | standardized.residuals > 1.96)
+possible.outliers
+```
+
+# We found 27 residuals are above or below 1.96 standard deviations. As this represents 4.8% of the observations, expected if the residuals are normal (5% of data is expected to be outside of 2 standard deviations), we do not consider any of these observations as outliers and continued with all 553 observations included in the third model.
+
+```{r}
+newValues<-data.frame(Distance=c(90,60,80))
+predict.lm(house.model3,newdata = newValues)
+```
+# Thus, as the distance from CBD increases, the price of houses decreases.
+
+```{r}
+durbinWatsonTest(house.model3)
+```
+# The Durbin-Watson test for independent errors was not significant at the 5% level of significance (d=1.50, p=0). As d is close to 2 (which would indicate no autocorrelation detected), we do not reject the null hypothesis that the errors are independent, and continue with the assumption of independence met.
+
+
+```{r}
+anova(house.model1,house.model2)
+
+```
+
+```{r}
+anova(house.model2,house.model3)
+
+```
+
+```{r}
+anova(house.model1,house.model3)
+
+```
+
+```{r}
+A<-AIC(house.model1)
+A
+B<-AIC(house.model2)
+B
+C<-AIC(house.model3)
+C
+```
+# Conclusions:
+
+#Here, it can be observed that the value is AIC is least for house.model2. Thus, it can be concluded that house.model2 is the best fitted model for predicting the prices of houses. Also, the next best model is house.model1. 
+
+# Based on the graphs visualization, multiple regression models and the output of ANOVA and AIC, the most 3 important features determining the house prices are: Rooms, Bathroom and Car .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+house_final$Regionname <- as.factor(house_final$Regionname)  
+str(house_final)
+```
+
+```{r}
+house.model4 <- lm(Price ~ Regionname, data=house_final)
+summary(house.model4)
+confint(house.model4)
+```
+```{r}
+newValues<-data.frame(Regionname=c('Southern Metropolitan'))
+predict.lm(house.model2,newdata = newValues)
+```
+
+*Instructions: Complete this assignment individually and submit online to the LEARN Dropbox as a ***_PDF (max 2 pages)_***. Also upload any source files, for example, and any .R or .Rmd files that you used. If you discussed problems with other students, please describe the nature of that discussion (e.g., on Team, in a study group). Remember, you can discuss approaches to problems with other people, but ***_the work you submit must be your own._**
+
+*Learning Objectives: In this assignment, you will perform a multiple linear regression, including ***_at least one comparison between two models._** *You will estimate the coefficients and assess the accuracy of coefficient estimates. Finally, you will need to assess and describe the accuracy of your model, and argue for choosing the set of parameters you chose either because of its predictive power, or because it led to a valuable insight. *
+
+
+**For your report**, include the following sections:
+
+ 1. Problem statement and data used: You are interested in getting into real estate, and hear that Australia's markets are hot right now. You've picked a city - Melbourne - but before you think about what home to buy, you want to understand the market a bit better. **Analyze this Melbourne housing dataset** to answer a question that will give better insight into your purchase,  using at least one model comparison or method of variable selection: [https://www.kaggle.com/dansbecker/melbourne-housing-snapshot](https://www.kaggle.com/dansbecker/melbourne-housing-snapshot). Some ideas:
+ 
+    a. The first rule of real estate is "location, location, location". Is this true? Compare the influence of location vs. features of the home. You may need to refine this into a more specific question.
+    b. Create and evaluate the most accurate model predicting a home's price (pick just one of a house, a unit, or townhome, and compare within that set).
+    c. Find the areas in town that will give you the biggest house for the price.
+    d. Imagine you are selling a 2-bedroom, 2-bathroom home in a given location. What's the best upgrade you can make to it before selling?
+    e. Determine the three most important factors determining house price.
+    
+
+ 2. Planning: Plan your analysis based on the problem statement. Include data wrangling, assumption tests, and any other analyses you may need to conduct.
+ 3. Analysis: Conduct a multiple linear regression, along with any appropriate assumption and accuracy checks. You will need to choose from two or more predictor variables, and compare your final model against other possible options (either through variable selection or to answer a research question).
+ 4. Conclusion: Write up your analyses in a report to your family member who is investing in you (who has not taken MSCI 718, and does not understand statistics) and explain your conclusions.
+
+
+ **Grading Criteria**
+ You will be graded against the same rubric that was used for pair assignments 1 and 2. We will be looking for a number of things:
+ 
+ 1. Data selection: How you chose data and your problem statement. We will consider how your problem statement fits both the data, and the method (regression) that you need to apply.
+ 2. Process and clarity of thought: Did you clearly apply a step by step process? Why did you chose the steps you did? Did you miss out on anything? Some examples would be ensuring you wrangled your data appropriately, checked the data against any assumptions required for the analysis, and did not do any work that was not required for this specific test.
+ 3. Presentation: Use bullets, subtitles, and the APA style for your report. Use simple language, do not use complicated words unless they help you describe a complex idea. Use graphs judiciously. Show your work - if you do not include something in the main report, the teaching staff will not grade it.
