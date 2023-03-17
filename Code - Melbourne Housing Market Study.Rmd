@@ -456,20 +456,6 @@ C
 
 # Based on the graphs visualization, multiple regression models and the output of ANOVA and AIC, the most 3 important features determining the house prices are: Rooms, Bathroom and Car .
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
 house_final$Regionname <- as.factor(house_final$Regionname)  
 str(house_final)
